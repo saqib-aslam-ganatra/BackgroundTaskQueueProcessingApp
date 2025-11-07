@@ -18,7 +18,7 @@ graph TD
     Worker[Background Worker Service]
     Logger[Logging & Monitoring]
     HealthEndpoint[Health Check Endpoint]
-    HostingEnvironment[Hosting Environment]
+    HostingEnvironment[Hosting Environment\n(Kestrel / IIS / Azure App Service)]
 
     ExternalSystems -->|Database change webhook| SimulatedEndpoint
     SimulatedEndpoint -->|Enqueue WorkItem| BackgroundQueue
@@ -26,13 +26,19 @@ graph TD
     Worker -->|Process task & log| Logger
     Worker -->|Result| ExternalSystems
     HealthEndpoint -->|Warm-up ping| HostingEnvironment
+    HostingEnvironment -->|Keeps process warm| Worker
 ```
 
 - **Queue Producer** – In production this would be a notification from the database change-tracking mechanism. The prototype simulates this with an HTTP endpoint (`POST /simulate-update`).
 - **Queue** – An in-memory bounded channel implementing `IBackgroundTaskQueue`. It provides back-pressure to avoid unbounded memory consumption (capacity 200 in the prototype).
 - **Consumer** – `TaskProcessingService` (`BackgroundService`) that continuously dequeues and processes work items.
 - **Health Monitoring** – `/health` endpoint wired through ASP.NET Core Health Checks so IIS/Azure can keep the app warm.
-- **Hosting** – The same app can be run via the `dotnet` CLI (Kestrel), IIS (ASP.NET Core Module), Azure App Service, or as a Windows/systemd service for worker-style hosting.
+- **Hosting** – The same app can be run via the `dotnet` CLI (Kestrel), IIS (ASP.NET Core Module), Azure App Service, or as a Windows/systemd service for worker-style hosting.  Health probes and warm-up pings ensure the background worker is hot before traffic arrives.
+
+### Hosting Environment Considerations
+- **Kestrel / Self-hosted** – `dotnet run` or a self-contained deployment keeps the queue worker colocated with the API.  Using `UseSystemd()` or packaging as a service ensures the process starts on boot and stays resident.
+- **IIS** – Deploy behind the ASP.NET Core Module with `hostingModel="InProcess"` for fastest startup.  Combine Always On, disabled idle time-outs, and application initialization hitting `/health` to guarantee the worker thread pool is already warmed.
+- **Azure App Service** – Enable Always On and deployment slot warm-up.  Use [App Service Managed Platform settings](https://learn.microsoft.com/azure/app-service/) to trigger health probes, and optionally pair with Azure Queue Storage if the workload grows beyond a single instance.
 
 ## 3. IIS and Azure Configuration to Avoid Shutdowns
 
