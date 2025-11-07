@@ -9,6 +9,7 @@ public sealed class TaskProcessingService : BackgroundService
     private readonly ILogger<TaskProcessingService> _logger;
     private readonly List<ProcessedWorkItem> _recentlyProcessed = new();
     private readonly TimeSpan _historyWindow = TimeSpan.FromMinutes(5);
+    private const int MaxHistoryItems = 200;
 
     public TaskProcessingService(IBackgroundTaskQueue taskQueue, ILogger<TaskProcessingService> logger)
     {
@@ -22,7 +23,7 @@ public sealed class TaskProcessingService : BackgroundService
         {
             lock (_recentlyProcessed)
             {
-                _recentlyProcessed.RemoveAll(item => item.CompletedAt < DateTimeOffset.UtcNow - _historyWindow);
+                PruneHistoryLocked();
                 return _recentlyProcessed.ToArray();
             }
         }
@@ -38,6 +39,11 @@ public sealed class TaskProcessingService : BackgroundService
             {
                 _logger.LogInformation("Processing work item {WorkItemId} from table {Table}", workItem.Id, workItem.TableName);
                 await ProcessWorkItemAsync(workItem, stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                _logger.LogInformation("Processing cancelled for work item {WorkItemId}", workItem.Id);
+                break;
             }
             catch (Exception ex)
             {
@@ -64,9 +70,21 @@ public sealed class TaskProcessingService : BackgroundService
 
         lock (_recentlyProcessed)
         {
+            PruneHistoryLocked();
             _recentlyProcessed.Add(processed);
+            if (_recentlyProcessed.Count > MaxHistoryItems)
+            {
+                var overflow = _recentlyProcessed.Count - MaxHistoryItems;
+                _recentlyProcessed.RemoveRange(0, overflow);
+            }
         }
 
         _logger.LogInformation("Completed work item {WorkItemId}", workItem.Id);
+    }
+
+    private void PruneHistoryLocked()
+    {
+        var threshold = DateTimeOffset.UtcNow - _historyWindow;
+        _recentlyProcessed.RemoveAll(item => item.CompletedAt < threshold);
     }
 }

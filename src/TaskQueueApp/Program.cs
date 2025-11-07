@@ -59,7 +59,12 @@ app.MapGet("/", () =>
 
 app.MapPost("/simulate-update", async (SimulatedUpdateRequest request, IBackgroundTaskQueue queue, CancellationToken cancellationToken) =>
 {
-    var workItem = new WorkItem(request.TableName, request.Payload, DateTimeOffset.UtcNow);
+    if (string.IsNullOrWhiteSpace(request.TableName) || string.IsNullOrWhiteSpace(request.Payload))
+    {
+        return Results.BadRequest(new { message = "Both tableName and payload are required." });
+    }
+
+    var workItem = new WorkItem(request.TableName.Trim(), request.Payload.Trim(), DateTimeOffset.UtcNow);
     await queue.QueueBackgroundWorkItemAsync(workItem, cancellationToken);
     return Results.Ok(new { message = "Task queued", id = workItem.Id });
 });
