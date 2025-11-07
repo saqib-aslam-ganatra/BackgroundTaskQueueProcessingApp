@@ -36,6 +36,27 @@ if (app.Environment.IsDevelopment())
 
 app.MapHealthChecks("/health");
 
+app.MapGet("/", () =>
+    Results.Content(
+        """
+        <html>
+            <head>
+                <title>Background Task Queue Processing App</title>
+            </head>
+            <body>
+                <h1>Background Task Queue Processing App</h1>
+                <p>The service is running. Use the available API endpoints to interact with it:</p>
+                <ul>
+                    <li><code>POST /simulate-update</code> &ndash; enqueue a simulated update request.</li>
+                    <li><code>GET /tasks</code> &ndash; view recently processed tasks.</li>
+                    <li><code>GET /health</code> &ndash; health check endpoint for readiness probes.</li>
+                </ul>
+                <p>If you are running in the Development environment, you can also explore the API through <a href="/swagger">Swagger UI</a>.</p>
+            </body>
+        </html>
+        """,
+        "text/html"));
+
 app.MapPost("/simulate-update", async (SimulatedUpdateRequest request, IBackgroundTaskQueue queue, CancellationToken cancellationToken) =>
 {
     var workItem = new WorkItem(request.TableName, request.Payload, DateTimeOffset.UtcNow);
