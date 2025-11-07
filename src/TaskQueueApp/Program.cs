@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Hosting.Systemd;
 using Microsoft.Extensions.Hosting.WindowsServices;
+using System;
+using System.Linq;
 using TaskQueueApp;
 using TaskQueueApp.Services;
 
@@ -70,5 +72,19 @@ app.MapPost("/simulate-update", async (SimulatedUpdateRequest request, IBackgrou
 });
 
 app.MapGet("/tasks", (TaskProcessingService processor) => Results.Ok(processor.RecentlyProcessedItems));
+
+app.MapGet("/tasks/{tableName}", (string tableName, TaskProcessingService processor) =>
+{
+    if (string.IsNullOrWhiteSpace(tableName))
+    {
+        return Results.BadRequest(new { message = "Table name is required." });
+    }
+
+    var matchingTasks = processor.RecentlyProcessedItems
+        .Where(item => string.Equals(item.TableName, tableName.Trim(), StringComparison.OrdinalIgnoreCase))
+        .ToList();
+
+    return Results.Ok(matchingTasks);
+});
 
 app.Run();
