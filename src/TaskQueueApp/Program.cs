@@ -61,7 +61,7 @@ app.MapPost("/simulate-update", async (SimulatedUpdateRequest request, IBackgrou
 {
     var workItem = new WorkItem(request.TableName, request.Payload, DateTimeOffset.UtcNow);
     await queue.QueueBackgroundWorkItemAsync(workItem, cancellationToken);
-    return Results.Accepted($"/tasks/{workItem.Id}", new { message = "Task queued", workItem.Id });
+    return Results.Accepted($"/tasks/{workItem.Id}", new { message = "Task queued", id = workItem.Id });
 });
 
 app.MapGet("/tasks", (TaskProcessingService processor) => Results.Ok(processor.RecentlyProcessedItems));
